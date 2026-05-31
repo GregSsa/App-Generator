@@ -89,7 +89,7 @@ def apply_file_patches(
     for patch in patch_requests[:MAX_PATCHES]:
         if not isinstance(patch, dict):
             continue
-        operation = str(patch.get("op", "")).strip()
+        operation = _normalize_patch_operation(patch)
         path = str(patch.get("path", "")).strip()
 
         if not _is_safe_project_path(path):
@@ -123,6 +123,33 @@ def apply_file_patches(
             results.append({"op": operation or "unknown", "path": path, "ok": False, "error": "Unsupported patch op."})
 
     return next_files, results
+
+
+def _normalize_patch_operation(patch: dict[str, Any]) -> str:
+    raw_operation = (
+        patch.get("op")
+        or patch.get("operation")
+        or patch.get("action")
+        or patch.get("type")
+        or patch.get("kind")
+        or ""
+    )
+    operation = str(raw_operation).strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "add_file": "upsert_file",
+        "create_file": "upsert_file",
+        "write_file": "upsert_file",
+        "update_file": "upsert_file",
+        "modify_file": "upsert_file",
+        "replace_file": "upsert_file",
+        "upsert": "upsert_file",
+        "replace": "replace_text",
+        "replace_in_file": "replace_text",
+        "replace_text_in_file": "replace_text",
+        "delete": "delete_file",
+        "remove_file": "delete_file",
+    }
+    return aliases.get(operation, operation)
 
 
 def _is_safe_project_path(path: str) -> bool:

@@ -52,6 +52,22 @@ def test_apply_file_patches_replaces_text() -> None:
     assert results == [{"op": "replace_text", "path": "app/src/main/java/MainActivity.kt", "ok": True}]
 
 
+def test_apply_file_patches_accepts_common_operation_aliases() -> None:
+    patched, results = apply_file_patches(
+        {},
+        [
+            {
+                "operation": "create_file",
+                "path": "settings.gradle.kts",
+                "content": 'rootProject.name = "Demo"\n',
+            }
+        ],
+    )
+
+    assert patched["settings.gradle.kts"] == 'rootProject.name = "Demo"\n'
+    assert results == [{"op": "upsert_file", "path": "settings.gradle.kts", "ok": True}]
+
+
 def test_apply_file_patches_rejects_unsafe_paths() -> None:
     patched, results = apply_file_patches(
         {"safe.kt": "content"},

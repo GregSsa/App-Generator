@@ -8,6 +8,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
+from .kotlin_templates import KotlinFileSpec, kotlin_string
 from .state import AppGeneratorState, ValidationIssue
 
 GENERATED_MANIFEST = ".ai_android_generator_manifest.json"
@@ -308,110 +309,120 @@ class AndroidProjectBuilder:
         ).strip() + "\n"
 
     def _main_activity(self, package_name: str, app_name: str, state: AppGeneratorState) -> str:
-        return dedent(
-            f"""
-            package {package_name}
+        return (
+            KotlinFileSpec(package_name)
+            .add_imports(
+                "android.os.Bundle",
+                "androidx.activity.ComponentActivity",
+                "androidx.activity.compose.setContent",
+                "androidx.activity.viewModels",
+                f"{package_name}.ui.AppRoot",
+                f"{package_name}.ui.AppViewModel",
+            )
+            .add_declaration(
+                f"""
+                class MainActivity : ComponentActivity() {{
+                    private val viewModel: AppViewModel by viewModels()
 
-            import android.os.Bundle
-            import androidx.activity.ComponentActivity
-            import androidx.activity.compose.setContent
-            import androidx.activity.viewModels
-            import {package_name}.ui.AppRoot
-            import {package_name}.ui.AppViewModel
-
-            class MainActivity : ComponentActivity() {{
-                private val viewModel: AppViewModel by viewModels()
-
-                override fun onCreate(savedInstanceState: Bundle?) {{
-                    super.onCreate(savedInstanceState)
-                    setContent {{
-                        AppRoot(
-                            appName = "{app_name}",
-                            viewModel = viewModel
-                        )
+                    override fun onCreate(savedInstanceState: Bundle?) {{
+                        super.onCreate(savedInstanceState)
+                        setContent {{
+                            AppRoot(
+                                appName = {kotlin_string(app_name)},
+                                viewModel = viewModel
+                            )
+                        }}
                     }}
                 }}
-            }}
-            """
-        ).strip() + "\n"
+                """
+            )
+            .render()
+        )
 
     def _static_main_activity(self, package_name: str, app_name: str, state: AppGeneratorState) -> str:
         message = self._static_message(state)
-        return dedent(
-            f"""
-            package {package_name}
-
-            import android.os.Bundle
-            import androidx.activity.ComponentActivity
-            import androidx.activity.compose.setContent
-            import androidx.compose.foundation.layout.Box
-            import androidx.compose.foundation.layout.fillMaxSize
-            import androidx.compose.foundation.layout.padding
-            import androidx.compose.material3.MaterialTheme
-            import androidx.compose.material3.Surface
-            import androidx.compose.material3.Text
-            import androidx.compose.runtime.Composable
-            import androidx.compose.ui.Alignment
-            import androidx.compose.ui.Modifier
-            import androidx.compose.ui.unit.dp
-
-            class MainActivity : ComponentActivity() {{
-                override fun onCreate(savedInstanceState: Bundle?) {{
-                    super.onCreate(savedInstanceState)
-                    setContent {{
-                        MaterialTheme {{
-                            Surface(modifier = Modifier.fillMaxSize()) {{
-                                StaticMessage(message = "{message}")
+        return (
+            KotlinFileSpec(package_name)
+            .add_imports(
+                "android.os.Bundle",
+                "androidx.activity.ComponentActivity",
+                "androidx.activity.compose.setContent",
+                "androidx.compose.foundation.layout.Box",
+                "androidx.compose.foundation.layout.fillMaxSize",
+                "androidx.compose.foundation.layout.padding",
+                "androidx.compose.material3.MaterialTheme",
+                "androidx.compose.material3.Surface",
+                "androidx.compose.material3.Text",
+                "androidx.compose.runtime.Composable",
+                "androidx.compose.ui.Alignment",
+                "androidx.compose.ui.Modifier",
+                "androidx.compose.ui.unit.dp",
+            )
+            .add_declaration(
+                f"""
+                class MainActivity : ComponentActivity() {{
+                    override fun onCreate(savedInstanceState: Bundle?) {{
+                        super.onCreate(savedInstanceState)
+                        setContent {{
+                            MaterialTheme {{
+                                Surface(modifier = Modifier.fillMaxSize()) {{
+                                    StaticMessage(message = {kotlin_string(message)})
+                                }}
                             }}
                         }}
                     }}
                 }}
-            }}
-
-            @Composable
-            private fun StaticMessage(message: String) {{
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {{
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }}
-            }}
-            """
-        ).strip() + "\n"
+                """
+            )
+            .add_declaration(
+                """
+                @Composable
+                private fun StaticMessage(message: String) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                }
+                """
+            )
+            .render()
+        )
 
     def _static_message(self, state: AppGeneratorState) -> str:
         prompt = state["prompt"].lower()
         if "hello world" in prompt:
             return "Hello World"
-        return state["app_name"].replace('"', '\\"')
+        return state["app_name"]
 
     def _models(self, package_name: str, state: AppGeneratorState) -> str:
         model_name = state["data_models"][0]["name"]
-        fields = "\n".join(
-            f"    val {field['name']}: {field['type']} = {self._kotlin_default_value(field['type'])},"
+        fields = ",\n".join(
+            f"    val {field['name']}: {field['type']} = {self._kotlin_default_value(field['type'])}"
             for field in state["data_models"][0]["fields"]
         )
-        return dedent(
-            f"""
-            package {package_name}.data
-
-            data class {model_name}(
-            {fields}
+        return (
+            KotlinFileSpec(f"{package_name}.data")
+            .add_declaration(
+                f"data class {model_name}(\n{fields}\n)"
             )
-
-            data class AppUiState(
-                val items: List<{model_name}> = emptyList(),
-                val selectedFilter: String = "All",
-                val notificationsEnabled: Boolean = true
+            .add_declaration(
+                f"""
+                data class AppUiState(
+                    val items: List<{model_name}> = emptyList(),
+                    val selectedFilter: String = "All",
+                    val notificationsEnabled: Boolean = true
+                )
+                """
             )
-            """
-        ).strip() + "\n"
+            .render()
+        )
 
     def _kotlin_default_value(self, kotlin_type: str) -> str:
         return {
@@ -426,17 +437,19 @@ class AndroidProjectBuilder:
     def _repository(self, package_name: str, state: AppGeneratorState) -> str:
         model_name = state["data_models"][0]["name"]
         sample_items = self._sample_items(model_name, state)
-        return dedent(
-            f"""
-            package {package_name}.data
-
-            class AppRepository {{
-                fun loadItems(): List<{model_name}> = listOf(
-            {sample_items}
-                )
-            }}
-            """
-        ).strip() + "\n"
+        return (
+            KotlinFileSpec(f"{package_name}.data")
+            .add_declaration(
+                f"""
+                class AppRepository {{
+                    fun loadItems(): List<{model_name}> = listOf(
+                {sample_items}
+                    )
+                }}
+                """
+            )
+            .render()
+        )
 
     def _view_model(self, package_name: str) -> str:
         return dedent(
@@ -473,7 +486,12 @@ class AndroidProjectBuilder:
         ).strip() + "\n"
 
     def _screens(self, package_name: str, app_name: str, state: AppGeneratorState) -> str:
-        requirement_badges = ", ".join(f'"{requirement[:32]}"' for requirement in state["requirements"][:4])
+        display_fields = self._display_fields(state)
+        primary_field = display_fields[0]
+        secondary_lines = "\n".join(
+            f"                                    Text(item.{field}, style = MaterialTheme.typography.bodyMedium)"
+            for field in display_fields[1:3]
+        )
         return dedent(
             f"""
             package {package_name}.ui
@@ -488,7 +506,6 @@ class AndroidProjectBuilder:
             import androidx.compose.foundation.layout.padding
             import androidx.compose.foundation.lazy.LazyColumn
             import androidx.compose.foundation.lazy.items
-            import androidx.compose.material3.AssistChip
             import androidx.compose.material3.Card
             import androidx.compose.material3.MaterialTheme
             import androidx.compose.material3.Switch
@@ -508,8 +525,7 @@ class AndroidProjectBuilder:
                     HomeScreen(
                         appName = appName,
                         state = state,
-                        onToggleNotifications = viewModel::toggleNotifications,
-                        onFilterSelected = viewModel::selectFilter
+                        onToggleNotifications = viewModel::toggleNotifications
                     )
                 }}
             }}
@@ -518,8 +534,7 @@ class AndroidProjectBuilder:
             fun HomeScreen(
                 appName: String,
                 state: AppUiState,
-                onToggleNotifications: () -> Unit,
-                onFilterSelected: (String) -> Unit
+                onToggleNotifications: () -> Unit
             ) {{
                 Column(
                     modifier = Modifier
@@ -539,31 +554,16 @@ class AndroidProjectBuilder:
                             onCheckedChange = {{ onToggleNotifications() }}
                         )
                     }}
-                    RequirementChips(onFilterSelected = onFilterSelected)
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {{
                         items(state.items) {{ item ->
                             Card(modifier = Modifier.fillMaxWidth()) {{
                                 Column(modifier = Modifier.padding(16.dp)) {{
-                                    Text(item.title, style = MaterialTheme.typography.titleMedium)
+                                    Text(item.{primary_field}, style = MaterialTheme.typography.titleMedium)
                                     Spacer(modifier = Modifier.height(6.dp))
-                                    Text(item.subtitle, style = MaterialTheme.typography.bodyMedium)
-                                    Text(item.status, style = MaterialTheme.typography.labelMedium)
+{secondary_lines}
                                 }}
                             }}
                         }}
-                    }}
-                }}
-            }}
-
-            @Composable
-            private fun RequirementChips(onFilterSelected: (String) -> Unit) {{
-                val filters = listOf("All", {requirement_badges})
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {{
-                    filters.take(3).forEach {{ filter ->
-                        AssistChip(
-                            onClick = {{ onFilterSelected(filter) }},
-                            label = {{ Text(filter) }}
-                        )
                     }}
                 }}
             }}
@@ -572,39 +572,64 @@ class AndroidProjectBuilder:
 
     def _tests(self, package_name: str, state: AppGeneratorState) -> str:
         expected_count = len(state["requirements"])
-        return dedent(
-            f"""
-            package {package_name}
-
-            import org.junit.Assert.assertTrue
-            import org.junit.Test
-
-            class RequirementsTest {{
-                @Test
-                fun generatedProjectKeepsCoreRequirements() {{
-                    val requirementCount = {expected_count}
-                    assertTrue(requirementCount >= 3)
+        return (
+            KotlinFileSpec(package_name)
+            .add_imports("org.junit.Assert.assertTrue", "org.junit.Test")
+            .add_declaration(
+                f"""
+                class RequirementsTest {{
+                    @Test
+                    fun generatedProjectKeepsCoreRequirements() {{
+                        val requirementCount = {expected_count}
+                        assertTrue(requirementCount >= 3)
+                    }}
                 }}
-            }}
-            """
-        ).strip() + "\n"
+                """
+            )
+            .render()
+        )
 
     def _sample_items(self, model_name: str, state: AppGeneratorState) -> str:
+        fields = state["data_models"][0]["fields"]
         prompt = state["prompt"].lower()
         if "manga" in prompt:
-            samples = [
-                ("One Piece", "Chapitre 1118 disponible", "A lire"),
-                ("Jujutsu Kaisen", "Suivi des derniers scans", "En cours"),
-                ("Frieren", "Notification activee", "Favori"),
+            sample_values = [
+                ["One Piece", "Chapitre 1118 disponible", "A lire"],
+                ["Jujutsu Kaisen", "Suivi des derniers scans", "En cours"],
+                ["Frieren", "Notification activee", "Favori"],
             ]
         else:
-            samples = [
-                ("Premier element", "Genere depuis le prompt utilisateur", "Actif"),
-                ("Tableau de bord", "Vue synthetique des donnees", "A verifier"),
-                ("Rappel intelligent", "Action recommandee par l'application", "Planifie"),
+            sample_values = [
+                ["Premier element", "Genere depuis le prompt utilisateur", "Actif"],
+                ["Tableau de bord", "Vue synthetique des donnees", "A verifier"],
+                ["Rappel intelligent", "Action recommandee par l'application", "Planifie"],
             ]
 
         lines = []
-        for title, subtitle, status in samples:
-            lines.append(f'        {model_name}(title = "{title}", subtitle = "{subtitle}", status = "{status}")')
+        for index, values in enumerate(sample_values):
+            args = []
+            for field_index, field in enumerate(fields):
+                value = values[field_index] if field_index < len(values) else f"Valeur {index + 1}"
+                args.append(f"{field['name']} = {self._sample_value_for_type(field['type'], value, index)}")
+            lines.append(f"        {model_name}({', '.join(args)})")
         return ",\n".join(lines)
+
+    def _display_fields(self, state: AppGeneratorState) -> list[str]:
+        fields = state["data_models"][0]["fields"]
+        string_fields = [field["name"] for field in fields if field["type"] == "String"]
+        if string_fields:
+            return string_fields
+        return [fields[0]["name"]]
+
+    def _sample_value_for_type(self, kotlin_type: str, text_value: str, index: int) -> str:
+        if kotlin_type == "String":
+            return kotlin_string(text_value)
+        if kotlin_type in {"Int", "Long"}:
+            suffix = "L" if kotlin_type == "Long" else ""
+            return f"{index + 1}{suffix}"
+        if kotlin_type in {"Float", "Double"}:
+            suffix = "f" if kotlin_type == "Float" else ""
+            return f"{index + 1}.0{suffix}"
+        if kotlin_type == "Boolean":
+            return "true" if index % 2 == 0 else "false"
+        return kotlin_string(text_value)

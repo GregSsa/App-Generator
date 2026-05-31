@@ -22,12 +22,6 @@ def generate(
     max_iterations: int = typer.Option(2, "--max-iterations", min=0, help="Maximum QA/fix loop attempts."),
     sequential: bool = typer.Option(False, "--sequential", help="Run without LangGraph for local dry runs."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print each completed LangGraph node."),
-   
-    openai: bool = typer.Option(
-        True,
-        "--openai/--local",
-        help="Use OpenAI-backed agents, or force deterministic local agents.",
-    ),
 ) -> None:
     """Generate and export an Android project."""
 
@@ -41,9 +35,14 @@ def generate(
         output_dir=target,
         max_iterations=max_iterations,
         use_langgraph=not sequential,
-        use_openai=openai,
         verbose=verbose,
     )
+
+    if state.get("status") == "failed":
+        typer.echo("Status: failed")
+        for issue in state.get("generation_errors", state.get("validation_errors", [])):
+            typer.echo(f"ERROR {issue['file']}: {issue['message']}")
+        raise typer.Exit(code=1)
 
     typer.echo(f"Application: {state['app_name']}")
     typer.echo(f"Package: {state['package_name']}")
@@ -51,6 +50,9 @@ def generate(
     typer.echo(f"Files: {len(state.get('files', {}))}")
     typer.echo(f"Output: {target.resolve()}")
     typer.echo(f"Iterations: {state['iteration']}/{max_iterations}")
+    build_result = state.get("build_result", {})
+    if build_result:
+        typer.echo(f"Build: {build_result.get('status', 'unknown')}")
     for issue in state.get("validation_errors", []):
         typer.echo(f"ERROR {issue['file']}: {issue['message']}")
     for issue in state.get("validation_warnings", []):

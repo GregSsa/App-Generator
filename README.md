@@ -14,6 +14,7 @@ Le workflow simule une petite equipe logicielle :
 - UI Developer : prepare les composables Jetpack Compose.
 - Integration Developer : assemble les plans specialises en projet coherent.
 - QA / Validator : verifie la coherence du projet genere.
+- Build Agent : exporte le projet, lance Gradle si disponible et recupere les erreurs.
 - Fix Agent : identifie le plus petit developpeur specialise a relancer.
 - Supervisor LangGraph : orchestre les noeuds, l'etat partage et la boucle validation -> correction.
 
@@ -43,21 +44,21 @@ ai-android-generator.exe "Creer une application Android de suivi de mangas avec 
 Diagnostiquer un run long :
 
 ```powershell
-ai-android-generator.exe "Creer une application Android qui affiche Hello World" --verbose --openai-timeout 25
+ai-android-generator.exe "Creer une application Android qui affiche Hello World" --verbose
 ```
 
 `--verbose` affiche les noeuds LangGraph termines et les appels OpenAI en cours.
+
+Pour desactiver LangSmith sur un run local :
+
+```powershell
+$env:LANGSMITH_TRACING='false'
+```
 
 Ou avec Python :
 
 ```powershell
 python -m ai_android_app_generator "Tracker de mangas avec notifications de nouveaux chapitres"
-```
-
-Mode local deterministe, sans appels OpenAI :
-
-```powershell
-python -m ai_android_app_generator "Tracker de mangas avec notifications" --local
 ```
 
 Dry run sans LangGraph, mais avec les memes agents :
@@ -68,8 +69,11 @@ python -m ai_android_app_generator "Tracker de mangas avec notifications" --sequ
 
 Avec le mode OpenAI actif, chaque agent du workflow tente son propre appel OpenAI :
 Product Manager, Architect, UI, Build Config Developer, Data Developer, UI Developer,
-Integration Developer, QA Validator et Fix Agent. Si la cle API ou l'extra Python manque,
-l'agent journalise le probleme et utilise son fallback local.
+Integration Developer, QA Validator et Fix Agent.
+
+Si un appel OpenAI echoue, la generation est annulee avec `status=failed` et aucun
+projet de secours n'est exporte. Une reponse OpenAI incomplete sur les cles obligatoires
+annule aussi la generation au lieu de basculer vers une valeur inventee localement.
 
 Le graphe evite de demander a un seul developpeur de tout produire en une fois :
 
@@ -82,15 +86,30 @@ Product Manager
   -> UI Developer
   -> Integration Developer
   -> QA Validator
+  -> Build Agent
   -> Fix Agent
       -> build_config | data | ui | integration
       -> Integration Developer
       -> QA Validator
+      -> Build Agent
 ```
 
 Les prompts des developpeurs imposent une barre qualite explicite : moins de code,
 code compilable, pas de couches inutiles, imports coherents, responsabilites separees,
 et respect strict du profil d'application.
+
+Les LLM disposent d'une toolbox Android explicite pour choisir les bonnes briques :
+
+- Material 3 + Compose adaptive : UI Compose et layouts adaptatifs si necessaire.
+- Navigation Compose / Navigation 3 : navigation multi-ecrans et back stack.
+- Room : persistance locale structuree et offline-first.
+- DataStore : preferences et petits reglages persistants.
+- WorkManager : taches de fond, sync et notifications fiables.
+- Retrofit/Ktor : integration HTTP/API distante.
+- Coil : chargement d'images, covers, avatars, posters.
+
+Ces outils ne sont pas ajoutes automatiquement a toutes les apps. Les agents doivent les
+selectionner seulement quand le prompt ou les requirements le justifient.
 
 Les agents OpenAI disposent aussi d'outils de lecture selective sur le projet genere :
 
@@ -131,14 +150,21 @@ Le Product Manager choisit aussi un profil d'application :
 Le fichier Gradle genere aligne Java et Kotlin sur une JVM toolchain 17 pour eviter
 les erreurs du type `compileDebugJavaWithJavac (1.8)` vs `compileDebugKotlin (21)`.
 
+La generation Kotlin utilise une couche de construction type KotlinPoet (`KotlinFileSpec`) :
+les fichiers Kotlin sont construits avec package, imports tries et declarations separees,
+plutot qu'avec un seul gros bloc texte. Cette couche sert uniquement a assembler un projet
+a partir des plans OpenAI valides ; elle ne sert pas de fallback local quand la generation
+LLM echoue.
+
 Le resultat contient un projet Gradle Android quasi pret a ouvrir dans Android Studio.
 
 ## Structure
 
 ```text
 src/ai_android_app_generator/
-  agents.py           Agents metier deterministes et extensibles
+  agents.py           Agents metier OpenAI et extensibles
   android_project.py  Generation des fichiers Android
+  kotlin_templates.py Construction Kotlin type FileSpec/KotlinPoet
   graph.py            Graphe LangGraph, developpeurs specialises et routage conditionnel
   state.py            Etat partage entre agents
   cli.py              Interface ligne de commande
@@ -147,4 +173,5 @@ tests/                Tests unitaires du workflow sans appel reseau
 
 ## Notes
 
-Le coeur reste testable localement, mais le chemin principal est OpenAI-first. Les fallbacks deterministes evitent qu'un prototype soit bloque par une cle API manquante pendant le developpement.
+Les tests utilisent des reponses OpenAI simulees, mais l'application en execution attend de
+vrais agents OpenAI et echoue explicitement si la generation LLM ne fonctionne pas.

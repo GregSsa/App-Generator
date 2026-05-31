@@ -13,7 +13,6 @@ class ValidationIssue(TypedDict):
 
 class AppGeneratorState(TypedDict, total=False):
     prompt: str
-    use_openai: bool
     app_name: str
     package_name: str
     app_profile: Literal["static_text", "data_driven"]
@@ -28,10 +27,15 @@ class AppGeneratorState(TypedDict, total=False):
     patch_results: list[dict[str, Any]]
     validation_errors: list[ValidationIssue]
     validation_warnings: list[ValidationIssue]
+    build_result: dict[str, Any]
+    build_errors: list[ValidationIssue]
+    build_warnings: list[ValidationIssue]
     implementation_plan: dict[str, Any]
     fix_plan: dict[str, Any]
     developer_focus: Literal["build_config", "data", "ui", "integration"]
     iteration: int
     max_iterations: int
+    output_dir: str
     status: Literal["draft", "generated", "needs_fix", "validated", "failed"]
     messages: list[str]
+    generation_errors: list[ValidationIssue]

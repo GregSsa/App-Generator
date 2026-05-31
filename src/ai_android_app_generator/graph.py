@@ -7,6 +7,7 @@ from typing import Any
 
 from .agents import (
     architect_agent,
+    build_agent,
     build_config_developer_agent,
     data_developer_agent,
     fix_agent,
@@ -21,13 +22,36 @@ from .state import AppGeneratorState
 
 
 def route_after_validation(state: AppGeneratorState) -> str:
-    if state.get("validation_errors") and state.get("iteration", 0) < state.get("max_iterations", 2):
+    if state.get("status") == "failed":
+        return "done"
+    if state.get("validation_errors"):
+        if state.get("iteration", 0) < state.get("max_iterations", 2):
+            return "fix"
+        return "done"
+    return "build"
+
+
+def route_after_build(state: AppGeneratorState) -> str:
+    if state.get("status") == "failed":
+        return "done"
+    if state.get("build_errors") and state.get("iteration", 0) < state.get("max_iterations", 2):
         return "fix"
     return "done"
 
 
 def route_after_fix(state: AppGeneratorState) -> str:
+    if state.get("status") == "failed":
+        return "done"
     return state.get("developer_focus", "integration")
+
+
+def continue_or_end(next_node: str):
+    def route(state: AppGeneratorState) -> str:
+        if state.get("status") == "failed":
+            return "done"
+        return next_node
+
+    return route
 
 
 def build_graph() -> Any:
@@ -47,17 +71,19 @@ def build_graph() -> Any:
     workflow.add_node("ui_developer", ui_developer_agent)
     workflow.add_node("integration_developer", integration_developer_agent)
     workflow.add_node("validator", validator_agent)
+    workflow.add_node("build", build_agent)
     workflow.add_node("fix", fix_agent)
 
     workflow.add_edge(START, "product_manager")
-    workflow.add_edge("product_manager", "architect")
-    workflow.add_edge("architect", "ui")
-    workflow.add_edge("ui", "build_config_developer")
-    workflow.add_edge("build_config_developer", "data_developer")
-    workflow.add_edge("data_developer", "ui_developer")
-    workflow.add_edge("ui_developer", "integration_developer")
-    workflow.add_edge("integration_developer", "validator")
-    workflow.add_conditional_edges("validator", route_after_validation, {"fix": "fix", "done": END})
+    workflow.add_conditional_edges("product_manager", continue_or_end("architect"), {"architect": "architect", "done": END})
+    workflow.add_conditional_edges("architect", continue_or_end("ui"), {"ui": "ui", "done": END})
+    workflow.add_conditional_edges("ui", continue_or_end("build_config_developer"), {"build_config_developer": "build_config_developer", "done": END})
+    workflow.add_conditional_edges("build_config_developer", continue_or_end("data_developer"), {"data_developer": "data_developer", "done": END})
+    workflow.add_conditional_edges("data_developer", continue_or_end("ui_developer"), {"ui_developer": "ui_developer", "done": END})
+    workflow.add_conditional_edges("ui_developer", continue_or_end("integration_developer"), {"integration_developer": "integration_developer", "done": END})
+    workflow.add_conditional_edges("integration_developer", continue_or_end("validator"), {"validator": "validator", "done": END})
+    workflow.add_conditional_edges("validator", route_after_validation, {"fix": "fix", "build": "build", "done": END})
+    workflow.add_conditional_edges("build", route_after_build, {"fix": "fix", "done": END})
     workflow.add_conditional_edges(
         "fix",
         route_after_fix,
@@ -66,6 +92,7 @@ def build_graph() -> Any:
             "data": "data_developer",
             "ui": "ui_developer",
             "integration": "integration_developer",
+            "done": END,
         },
     )
 
@@ -75,16 +102,17 @@ def build_graph() -> Any:
 def run_sequential_workflow(
     prompt: str,
     max_iterations: int = 2,
-    use_openai: bool = True,
+    output_dir: Path | None = None,
 ) -> AppGeneratorState:
     state: AppGeneratorState = {
         "prompt": prompt,
-        "use_openai": use_openai,
         "iteration": 0,
         "max_iterations": max_iterations,
         "messages": [],
         "status": "draft",
     }
+    if output_dir is not None:
+        state["output_dir"] = str(output_dir)
 
     focused_developer_sequences = {
         "build_config": (build_config_developer_agent, data_developer_agent, ui_developer_agent, integration_developer_agent),
@@ -104,13 +132,30 @@ def run_sequential_workflow(
         validator_agent,
     ):
         state.update(node(state))
+        if state.get("status") == "failed":
+            return state
 
-    while route_after_validation(state) == "fix":
+    if route_after_validation(state) == "build":
+        state.update(build_agent(state))
+        if state.get("status") == "failed":
+            return state
+
+    while route_after_validation(state) == "fix" or route_after_build(state) == "fix":
         state.update(fix_agent(state))
+        if state.get("status") == "failed":
+            return state
         focus = route_after_fix(state)
         for node in focused_developer_sequences.get(focus, (integration_developer_agent,)):
             state.update(node(state))
+            if state.get("status") == "failed":
+                return state
         state.update(validator_agent(state))
+        if state.get("status") == "failed":
+            return state
+        if route_after_validation(state) == "build":
+            state.update(build_agent(state))
+            if state.get("status") == "failed":
+                return state
 
     return state
 
@@ -118,20 +163,25 @@ def generate_application(
     prompt: str,
     max_iterations: int = 2,
     use_langgraph: bool = True,
-    use_openai: bool = True,
     verbose: bool = False,
+    output_dir: Path | None = None,
 ) -> AppGeneratorState:
     if not use_langgraph:
-        return run_sequential_workflow(prompt=prompt, max_iterations=max_iterations, use_openai=use_openai)
+        return run_sequential_workflow(
+            prompt=prompt,
+            max_iterations=max_iterations,
+            output_dir=output_dir,
+        )
 
     initial_state: AppGeneratorState = {
         "prompt": prompt,
-        "use_openai": use_openai,
-        "iteration": 0,
+        "iteration": 1,
         "max_iterations": max_iterations,
         "messages": [],
         "status": "draft",
     }
+    if output_dir is not None:
+        initial_state["output_dir"] = str(output_dir)
     graph = build_graph()
     config = {"recursion_limit": max(25, 10 + max_iterations * 8)}
     if not verbose:
@@ -151,15 +201,14 @@ def generate_and_write(
     output_dir: Path,
     max_iterations: int = 2,
     use_langgraph: bool = True,
-    use_openai: bool = True,
     verbose: bool = False,
 ) -> AppGeneratorState:
     final_state = generate_application(
         prompt=prompt,
         max_iterations=max_iterations,
         use_langgraph=use_langgraph,
-        use_openai=use_openai,
         verbose=verbose,
+        output_dir=output_dir,
     )
     if final_state.get("status") == "failed":
         return final_state
