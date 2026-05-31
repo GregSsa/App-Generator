@@ -7,6 +7,7 @@ from typing import Any
 
 from .android_project import AndroidProjectBuilder, to_package_segment, to_pascal_case
 from . import llm
+from .file_tools import apply_file_patches
 from .state import AppGeneratorState
 
 
@@ -262,7 +263,9 @@ def integration_developer_agent(state: AppGeneratorState) -> dict[str, Any]:
                     "You are the Integration Developer. Assemble the outputs from Build Config, "
                     "Data, and UI developers into one coherent Android project plan. Quality bar: "
                     "compile-ready file graph, no duplicate responsibilities, no stale files, no "
-                    "architecture beyond the user need. Return JSON key implementation_plan."
+                    "architecture beyond the user need. Return JSON key implementation_plan. "
+                    "If a small file edit is enough, include implementation_plan.file_patches with "
+                    "structured patch ops: replace_text, upsert_file, or delete_file."
                 ),
                 _developer_payload(state),
                 project_files=state.get("files", {}),
@@ -276,9 +279,11 @@ def integration_developer_agent(state: AppGeneratorState) -> dict[str, Any]:
 
     state_for_build = {**state, "implementation_plan": implementation_plan}
     files = AndroidProjectBuilder().build(state_for_build)
+    files, patch_results = apply_file_patches(files, implementation_plan.get("file_patches"))
     return {
         "files": files,
         "implementation_plan": implementation_plan,
+        "patch_results": patch_results,
         "status": "generated",
         "messages": messages + [f"Integration Developer: generated {len(files)} project files."],
     }

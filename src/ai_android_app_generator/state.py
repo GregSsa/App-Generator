@@ -25,6 +25,7 @@ class AppGeneratorState(TypedDict, total=False):
     data_plan: dict[str, Any]
     ui_implementation_plan: dict[str, Any]
     files: dict[str, str]
+    patch_results: list[dict[str, Any]]
     validation_errors: list[ValidationIssue]
     validation_warnings: list[ValidationIssue]
     implementation_plan: dict[str, Any]

@@ -149,6 +149,37 @@ def test_specialized_developers_create_separate_plans() -> None:
     assert "files" in state
 
 
+def test_integration_developer_applies_targeted_file_patches(monkeypatch) -> None:
+    def fake_openai_agent(agent_name: str, system_prompt: str, payload: dict, project_files=None) -> dict:
+        if agent_name == "integration_developer":
+            return {
+                "implementation_plan": {
+                    "file_patches": [
+                        {
+                            "op": "replace_text",
+                            "path": "app/src/main/java/com/generated/helloworld/MainActivity.kt",
+                            "old": "Hello World",
+                            "new": "Bonjour Android",
+                        }
+                    ]
+                }
+            }
+        return {"agent": agent_name}
+
+    monkeypatch.setattr("ai_android_app_generator.llm.ask_openai_agent", fake_openai_agent)
+
+    state = run_sequential_workflow(
+        "Creer une application Android qui affiche proprement Hello World",
+        use_openai=False,
+    )
+    state["use_openai"] = True
+    result = integration_developer_agent(state)
+
+    main_activity = result["files"]["app/src/main/java/com/generated/helloworld/MainActivity.kt"]
+    assert "Bonjour Android" in main_activity
+    assert result["patch_results"][0]["ok"] is True
+
+
 def test_openai_mode_calls_fix_agent(monkeypatch) -> None:
     calls: list[str] = []
 

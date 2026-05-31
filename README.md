@@ -102,6 +102,27 @@ Le runtime execute ces demandes et renvoie seulement les extraits utiles a l'age
 Cela evite d'envoyer tout le projet dans chaque prompt, tout en permettant au QA,
 au Fix Agent et aux developpeurs specialises de relire le code deja produit.
 
+L'Integration Developer peut ensuite retourner des patches cibles au lieu de demander
+une regeneration complete :
+
+```json
+{
+  "implementation_plan": {
+    "file_patches": [
+      {
+        "op": "replace_text",
+        "path": "app/src/main/java/com/generated/app/MainActivity.kt",
+        "old": "Hello",
+        "new": "Hello World"
+      }
+    ]
+  }
+}
+```
+
+Operations supportees : `replace_text`, `upsert_file`, `delete_file`. Les chemins sont
+valides pour le projet genere uniquement.
+
 Le Product Manager choisit aussi un profil d'application :
 
 - `static_text` : app Compose minimale pour un ecran statique type Hello World.

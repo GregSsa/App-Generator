@@ -34,7 +34,8 @@ def ask_openai_agent(
         raise OpenAIUnavailable("Install the OpenAI extra with `pip install -e .[openai]`.") from exc
 
     model_name = os.getenv("OPENAI_MODEL", "gpt-5-mini")
-    model = ChatOpenAI(model=model_name, max_retries=1)
+    timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "25"))
+    model = ChatOpenAI(model=model_name, timeout=timeout, max_retries=1)
     files = project_files or {}
     agent_payload = _with_file_tool_context(payload, files)
     messages = [
