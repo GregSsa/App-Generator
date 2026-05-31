@@ -1,0 +1,33 @@
+[project]
+name = "ai-android-app-generator"
+version = "0.1.0"
+description = "LangGraph multi-agent workflow that generates Android Kotlin/Jetpack Compose project skeletons from natural language prompts."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "langgraph>=1.0,<2.0",
+  "pydantic>=2.7,<3.0",
+  "typer>=0.12,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9.0",
+]
+openai = [
+  "langchain-openai>=0.3,<1.0",
+]
+
+[project.scripts]
+ai-android-generator = "ai_android_app_generator.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_android_app_generator"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
