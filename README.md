@@ -33,6 +33,21 @@ pip install -e ".[openai]"
 copy .env.example .env
 ```
 
+Les outils de lecture de fichiers utilisent le Filesystem MCP Server. Le client Python MCP
+est installe avec l'extra `openai`, et le serveur est lance par defaut avec :
+
+```powershell
+npx -y @modelcontextprotocol/server-filesystem <snapshot-temporaire-du-projet>
+```
+
+Node.js/npm doivent donc etre disponibles pour les runs reels. Vous pouvez remplacer la
+commande serveur si besoin :
+
+```powershell
+$env:AI_GENERATOR_MCP_FILESYSTEM_COMMAND='npx'
+$env:AI_GENERATOR_MCP_FILESYSTEM_ARGS='["-y","@modelcontextprotocol/server-filesystem","{root}"]'
+```
+
 ## Utilisation
 
 Generer un projet Android :
@@ -111,7 +126,10 @@ Les LLM disposent d'une toolbox Android explicite pour choisir les bonnes brique
 Ces outils ne sont pas ajoutes automatiquement a toutes les apps. Les agents doivent les
 selectionner seulement quand le prompt ou les requirements le justifient.
 
-Les agents OpenAI disposent aussi d'outils de lecture selective sur le projet genere :
+Les agents OpenAI disposent aussi d'outils de lecture selective sur le projet genere.
+Ces outils ne sont plus un pseudo-MCP local : le runtime cree un snapshot temporaire
+des fichiers en memoire, lance un vrai Filesystem MCP Server sur ce repertoire, puis
+execute les demandes de l'agent via MCP.
 
 - `list_project_files` : lister les fichiers disponibles.
 - `read_project_files` : demander le contenu de fichiers precis.
@@ -166,6 +184,7 @@ src/ai_android_app_generator/
   android_project.py  Generation des fichiers Android
   kotlin_templates.py Construction Kotlin type FileSpec/KotlinPoet
   graph.py            Graphe LangGraph, developpeurs specialises et routage conditionnel
+  mcp_filesystem.py   Bridge vers le Filesystem MCP Server
   state.py            Etat partage entre agents
   cli.py              Interface ligne de commande
 tests/                Tests unitaires du workflow sans appel reseau

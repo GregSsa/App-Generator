@@ -137,7 +137,9 @@ def ui_agent(state: AppGeneratorState) -> dict[str, Any]:
                 "only when there are multiple real destinations, and Coil only when images are needed. "
                 "the Android app. Return JSON keys: screens, data_models. screens must be a "
                 "list of objects with name, purpose, components. data_models must be a list "
-                "of objects with name and fields, where fields have name and Kotlin type. "
+                "of objects with name and fields. fields MUST be a list of objects, never a dictionary "
+                "and never strings. Each field object MUST have exactly name and type keys, for example: "
+                '{"name":"Manga","fields":[{"name":"title","type":"String"},{"name":"latestChapter","type":"Int"}]}. '
                 "For static_text apps, return an empty data_models list. For data_driven apps, "
                 "return at least one model with fields that match the user's domain. "
                 "Do not omit required keys."
@@ -190,7 +192,8 @@ def build_config_developer_agent(state: AppGeneratorState) -> dict[str, Any]:
                 "DataStore, WorkManager, Retrofit/Ktor, or Coil are needed. Return JSON key "
                 "build_config_plan. If you need concrete Gradle changes, include "
                 "build_config_plan.file_patches. Each patch must use op exactly equal to "
-                "upsert_file, replace_text, or delete_file. "
+                "upsert_file, replace_text, or delete_file. Example: "
+                '{"op":"upsert_file","path":"gradle.properties","content":"android.useAndroidX=true\\n"}. '
                 "Do not describe files or snippets unless you also provide file_patches. "
                 "Do not omit required keys."
             ),
@@ -232,7 +235,8 @@ def data_developer_agent(state: AppGeneratorState) -> dict[str, Any]:
                 "background sync or notifications. "
                 "Return JSON key data_plan. If you create Kotlin data/repository code, include "
                 "data_plan.file_patches. Each patch must use op exactly equal to "
-                "upsert_file, replace_text, or delete_file. "
+                "upsert_file, replace_text, or delete_file. Example: "
+                '{"op":"upsert_file","path":"app/src/main/java/com/generated/app/data/AppModels.kt","content":"package com.generated.app.data\\n\\n"}. '
                 "Do not describe files or snippets unless you also provide file_patches. "
                 "Do not omit required keys."
             ),
@@ -275,7 +279,9 @@ def ui_developer_agent(state: AppGeneratorState) -> dict[str, Any]:
                 "Return JSON key ui_implementation_plan. If you create or change Compose code, include "
                 "ui_implementation_plan.file_patches. Each patch must use op exactly equal to "
                 "upsert_file, replace_text, or delete_file "
-                "with complete file contents for new files. Do not output file_map, snippets, or code "
+                "with complete file contents for new files. Example: "
+                '{"op":"upsert_file","path":"app/src/main/java/com/generated/app/ui/HomeScreen.kt","content":"package com.generated.app.ui\\n\\n"}. '
+                "Do not output file_map, snippets, or code "
                 "descriptions unless those changes are materialized in file_patches. Do not omit required keys."
             ),
             _developer_payload(state),
@@ -314,7 +320,9 @@ def integration_developer_agent(state: AppGeneratorState) -> dict[str, Any]:
                 "screens, routes, ViewModels, repositories, dependencies, or build settings that are not "
                 "already represented in generated files, include implementation_plan.file_patches with "
                 "structured patches. Each patch must use op exactly equal to replace_text, upsert_file, "
-                "or delete_file. Do not leave promised "
+                "or delete_file. Example: "
+                '{"op":"replace_text","path":"app/build.gradle.kts","old":"minSdk = 23","new":"minSdk = 26"}. '
+                "Do not leave promised "
                 "code as prose only. Do not omit required keys."
             ),
             _developer_payload(state),

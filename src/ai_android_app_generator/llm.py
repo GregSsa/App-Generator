@@ -8,7 +8,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .file_tools import execute_file_tool_requests, list_project_files
+from .file_tools import list_project_files
+from .mcp_filesystem import execute_mcp_file_tool_requests
 
 
 class OpenAIUnavailable(RuntimeError):
@@ -51,7 +52,7 @@ def ask_openai_agent(
             f"{system_prompt}\n\n"
             "Return only one valid JSON object. Do not wrap it in markdown. "
             f'Include an "agent" field with value "{agent_name}".\n\n'
-            "You may inspect generated project files before your final answer. "
+            "You may inspect generated project files before your final answer through the Filesystem MCP Server. "
             'To request files, return JSON with "tool_requests": a list of objects. '
             'Supported tools: {"tool":"list_project_files"}, '
             '{"tool":"read_project_files","paths":["app/build.gradle.kts"]}, '
@@ -65,7 +66,7 @@ def ask_openai_agent(
     response = model.invoke(messages)
     parsed = _response_to_json_with_repair(model, messages, response, agent_name)
 
-    tool_results = execute_file_tool_requests(files, parsed.get("tool_requests"))
+    tool_results = execute_mcp_file_tool_requests(files, parsed.get("tool_requests"))
     if tool_results:
         _verbose(f"[openai] {agent_name} tool follow-up started")
         follow_up_messages = messages + [
@@ -103,11 +104,12 @@ def _with_file_tool_context(payload: dict[str, Any], project_files: dict[str, st
 
     return {
         **payload,
-        "file_tools": {
-            "available_files": list_project_files(project_files),
-            "note": "Request specific files with tool_requests instead of guessing from filenames.",
-        },
-    }
+            "file_tools": {
+                "available_files": list_project_files(project_files),
+                "backend": "filesystem_mcp_server",
+                "note": "Request specific files with tool_requests instead of guessing from filenames. Requests are executed through a Filesystem MCP Server on a temporary project snapshot.",
+            },
+        }
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:

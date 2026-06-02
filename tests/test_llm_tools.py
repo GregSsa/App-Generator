@@ -56,6 +56,16 @@ def test_openai_agent_can_request_file_context(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     fake_module = types.SimpleNamespace(ChatOpenAI=lambda **kwargs: fake_model)
     monkeypatch.setitem(sys.modules, "langchain_openai", fake_module)
+    monkeypatch.setattr(
+        llm,
+        "execute_mcp_file_tool_requests",
+        lambda files, requests: [
+            {
+                "tool": "read_project_files",
+                "files": {"app/build.gradle.kts": files["app/build.gradle.kts"]},
+            }
+        ],
+    )
 
     result = llm.ask_openai_agent(
         "validator",

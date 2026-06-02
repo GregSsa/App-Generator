@@ -16,6 +16,10 @@ dev = [
 ]
 openai = [
   "langchain-openai>=0.3,<1.0",
+  "mcp>=1.0,<2.0",
+]
+mcp = [
+  "mcp>=1.0,<2.0",
 ]
 
 [project.scripts]
